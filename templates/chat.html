@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Generative AI Chatbot Assistant</title>
+	<link rel="icon" type="image/png" href="{{ url_for('static', filename='images/insurance.png')}}" />
+	<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/style.css')}}" />
+	<script src="https://kit.fontawesome.com/52abad041e.js" crossorigin="anonymous"></script>
+</head>
+<body>
+<div class="container">
+	<div class="custom-msg_head">
+		<div class="custom-user_info">
+			<span>Insurance Helpmate</span>
+		</div>
+	</div>
+	<div id="messageArea" class="custom-msg_card_body">
+		{% for entry in name_xyz %}
+		<div class="d-flex justify-content-start mb-4">
+			<div class="custom-img_cont_msg">
+				<img src="{{ url_for('static', filename='images/insurance.png') }}" class="rounded-circle custom-user_img_msg" alt="Bot">
+			</div>
+			<div class="custom-msg_cotainer">{{ entry.bot }}<span class="custom-msg_time">{{ user_time }}</span></div>
+		</div>
+		{% endfor %}
+	</div>
+	<div class="custom-msg_footer">
+		<form id="chatMessage" action="/getresponse" method="POST" style="display: flex; align-items: center; gap: 10px;">
+			<input type="text" id="user_input_message" name="user_input_message" placeholder="Type your message..." autocomplete="off" class="custom-type_msg" required />
+			<button type="submit" id="submitbutton" class="custom-send_btn">Send<i class="fas fa-paper-plane plane-button"></i></button>
+			<button type="button" class="btn-restart" onclick="clearChatHistory()">Restart Conversation</button>
+		</form>
+	</div>
+</div>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script src="https://kit.fontawesome.com/52abad041e.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" integrity="sha384-oBqDVmMz9ATKxIep9tiCxS/Z9fNfEXiDAYTujMAeBAsjFuCZSmKbSSUnQlmh/jp3" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.min.js" integrity="sha384-cuYeSxntonz0PPNlHhBs68uyIAVpIIOZZ5JqeqvYYIcEL727kskC66kF92t6Xl2V" crossorigin="anonymous"></script>
+<script>
+	function checkProcessingStatus() {
+        const submitBtn = document.getElementById("submitbutton");
+        submitBtn.innerHTML = '<div class="loader-rectangle"></div>';
+        submitBtn.disabled = true;
+        fetch('/check-processing')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'completed') {
+                    appendBotMessage("Processing complete. You can now ask questions about Principal Insurance Policy.");
+                    clearInterval(statusCheckInterval);
+                    submitBtn.innerHTML = 'Send<i class="fas fa-paper-plane plane-button"></i>';
+                    submitBtn.disabled = false;
+                }
+            });
+    }
+
+    let statusCheckInterval = setInterval(checkProcessingStatus, 5000);
+    let fetchTimeoutRef;
+    let chatEndingTimeoutRef;
+    document.addEventListener("DOMContentLoaded", function() {
+        const submitBtn = document.getElementById("submitbutton");
+        document.getElementById("chatMessage").addEventListener("submit", function(event) {
+            event.preventDefault();
+            submitBtn.innerHTML = '<div class="loader-rectangle"></div>';
+            submitBtn.disabled = true;
+
+            const userChat = document.getElementById("user_input_message").value;
+            document.getElementById("user_input_message").value = "";
+            appendUserMessage(userChat);
+            const processingId = showProcessingIndicator();
+
+            fetch("/getresponse", {
+                method: "POST",
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `user_input_message=${encodeURIComponent(userChat)}`
+            })
+            .then(response => response.text())
+            .then(dataText => {
+                clearTimeout(fetchTimeoutRef);
+                clearTimeout(chatEndingTimeoutRef);
+                const data = JSON.parse(dataText);
+                removeProcessingIndicator(processingId);
+                if (data.message) {
+                    appendBotMessage(data.message);
+                } else if (data.error) {
+                    console.error("Server error:", data.error);
+                    appendBotMessage("Sorry, there was an error processing your request.");
+                }
+
+                submitBtn.innerHTML = 'Send<i class="fas fa-paper-plane plane-button"></i>';
+                submitBtn.disabled = false;
+            })
+            .catch(error => {
+                console.error("Fetch error:", error);
+                appendBotMessage("Sorry, there was an error processing your request.");
+            });
+
+            fetchTimeoutRef = setTimeout(() => {
+                endMsg = "No response from bot, chat restarting in 5s..."
+                appendBotMessage(endMsg);
+                chatEndingTimeoutRef = setTimeout(() => {
+                    clearChatHistory();
+                }, 5000);
+            }, 30000);
+        });
+    });
+
+    function appendUserMessage(message) {
+        const messageArea = document.getElementById("messageArea");
+        const date = new Date();
+        const hour = date.getHours();
+        const minute = date.getMinutes();
+        const user_time = hour + ":" + minute;
+        var userIcon = "{{ url_for('static', filename='images/usericon.png') }}";
+        const userHtml = '<div class="d-flex justify-content-end mb-4 user-message"><div class="custom-msg_cotainer_send">' + message + '<span class="custom-msg_time_send">' + user_time + '</span></div><div class="custom-img_cont_msg"><img src="'+ userIcon +'" class="rounded-circle custom-user_img_msg"></div></div>';
+        messageArea.insertAdjacentHTML('beforeend', userHtml);
+        messageArea.scrollTop = messageArea.scrollHeight;
+    }
+
+    function showProcessingIndicator() {
+        const messageArea = document.getElementById("messageArea");
+        const processingHtml = '<div id="processing" class="d-flex justify-content-start mb-4"><div class="custom-msg_cotainer">...</div></div>';
+        messageArea.insertAdjacentHTML('beforeend', processingHtml);
+        messageArea.scrollTop = messageArea.scrollHeight;
+        return "processing";
+    }
+
+    function removeProcessingIndicator(processingId) {
+        const processingElement = document.getElementById(processingId);
+        if (processingElement) {
+            processingElement.parentNode.removeChild(processingElement);
+        }
+    }
+
+    function appendBotMessage(data) {
+        const messageArea = document.getElementById("messageArea");
+        const date = new Date();
+        const hour = date.getHours();
+        const minute = date.getMinutes();
+        const bot_time = hour + ":" + minute;
+        const firstMessage = data;
+        var logoURL = "{{ url_for('static', filename='images/insurance.png') }}";
+        const botHtml = '<div class="d-flex justify-content-start mb-4 bot-message"><div class="custom-img_cont_msg"><img src="'+ logoURL +'" class="rounded-circle custom-user_img_msg"></div><div class="custom-msg_cotainer">' + firstMessage + '<span class="custom-msg_time">' + bot_time + '</span></div></div>';
+        messageArea.insertAdjacentHTML('beforeend', botHtml);
+        messageArea.scrollTop = messageArea.scrollHeight;
+    }
+
+
+    function clearChatHistory() {
+        localStorage.removeItem('chatHistory');
+        fetch("/end_conv", {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+        })
+        .then(response => {
+            document.getElementById("messageArea").innerHTML = '';
+            window.location.reload();
+        });
+    }
+
+</script>
+</body>
+</html>
